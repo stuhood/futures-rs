@@ -91,9 +91,11 @@ impl<I> Future for JoinAll<I>
 
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        println!("<join_all> polling {}", self.elems.len());
         let mut all_done = true;
 
         for idx in 0 .. self.elems.len() {
+            println!("<join_all>   inspecting {:?}", idx);
             let done_val = match &mut self.elems[idx] {
                 &mut ElemState::Pending(ref mut t) => {
                     match t.poll() {
@@ -107,6 +109,8 @@ impl<I> Future for JoinAll<I>
                 }
                 &mut ElemState::Done(ref mut _v) => continue,
             };
+
+            println!("<join_all>   elem {:?} was {:?}", idx, match &done_val { &Ok(_) => "ok", &Err(_) => "err"});
 
             match done_val {
                 Ok(v) => self.elems[idx] = ElemState::Done(v),
