@@ -180,7 +180,7 @@ impl<F> Future for Shared<F>
         let mut state = self.inner.state.lock().unwrap();
         match mem::replace(&mut *state, new_state) {
             State::Polling(_owner, unparker, waiters) => {
-                self.if_debug(&format!("finished polling... call unpark? {:?}; waking waiters {:?}", call_unpark, waiters));
+                //self.if_debug(&format!("finished polling... call unpark? {:?}; waking waiters {:?}", call_unpark, waiters));
                 if call_unpark { unparker.unpark() }
                 for waiter in waiters {
                     waiter.unpark();
