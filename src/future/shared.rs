@@ -30,8 +30,6 @@ use task;
 pub struct Shared<F: Future> {
     id: u64,
     inner: Arc<Inner<F>>,
-    /// Set to a non-None value to trigger debug during poll of this JoinAll.
-    pub debug: Option<String>,
 }
 
 impl<F> fmt::Debug for Shared<F>
@@ -50,6 +48,8 @@ impl<F> fmt::Debug for Shared<F>
 struct Inner<F: Future> {
     next_clone_id: Mutex<u64>,
     state: Mutex<State<F>>,
+    /// Set to a non-None value to trigger debug during poll of this JoinAll.
+    pub debug: Mutex<Option<String>>,
 }
 
 impl<F> fmt::Debug for Inner<F>
@@ -83,13 +83,14 @@ impl<F> Shared<F>
                 Inner {
                     next_clone_id: Mutex::new(1),
                     state: Mutex::new(State::Waiting(Arc::new(Unparker::new()), future)),
+                    debug: Mutex::new(None),
                  }),
-            debug: None,
         }
     }
 
     fn if_debug(&self, msg: &str) {
-        if let Some(id) = self.debug.as_ref() {
+        let debug = self.inner.debug.lock().unwrap();
+        if let Some(id) = debug.as_ref() {
             println!("<shared> <{}> {}: {}", self.id, id, msg);
         }
     }
@@ -194,7 +195,6 @@ impl<F> Clone for Shared<F>
         Shared {
             id: clone_id,
             inner: self.inner.clone(),
-            debug: self.debug.clone(),
         }
     }
 }
