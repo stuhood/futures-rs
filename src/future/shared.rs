@@ -48,7 +48,7 @@ impl<F> fmt::Debug for Shared<F>
 struct Inner<F: Future> {
     next_clone_id: Mutex<u64>,
     state: Mutex<State<F>>,
-    debug: Mutex<Option<String>>,
+    debug: Option<String>,
 }
 
 impl<F> fmt::Debug for Inner<F>
@@ -82,20 +82,22 @@ impl<F> Shared<F>
                 Inner {
                     next_clone_id: Mutex::new(1),
                     state: Mutex::new(State::Waiting(Arc::new(Unparker::new()), future)),
-                    debug: Mutex::new(None),
+                    debug: None,
                  }),
         }
     }
 
     /// Set an id for this Shared to enable debug logging.
-    pub fn set_debug(&self, id: String) {
-        let mut debug = self.inner.debug.lock().unwrap();
-        *debug = Some(id);
+    pub fn set_debug(&mut self, id: String) {
+        let inner =
+          Arc::get_mut(&mut self.inner).unwrap_or_else(|| 
+            panic!("{:?} is already shared.", id)
+          );
+        inner.debug = Some(id);
     }
 
     fn if_debug(&self, msg: &str) {
-        let debug = self.inner.debug.lock().unwrap();
-        if let Some(id) = debug.as_ref() {
+        if let Some(id) = self.inner.debug.as_ref() {
             println!("<shared> <{}> {}: {}", self.id, id, msg);
         }
     }
@@ -161,7 +163,7 @@ impl<F> Future for Shared<F>
         };
         drop(state);
 
-        // self.if_debug("polling!");
+        self.if_debug("polling!");
 
         let event = task::UnparkEvent::new(unparker.clone(), 0);
         let new_state = match task::with_unpark_event(event, || original_future.poll()) {
@@ -177,7 +179,7 @@ impl<F> Future for Shared<F>
             State::Done(Err(ref e)) => (true, Err(SharedError { error: e.clone() }.into())),
         };
 
-        // self.if_debug(&format!("finished polling... call unpark? {:?}", call_unpark));
+        self.if_debug(&format!("finished polling... call unpark? {:?}", call_unpark));
 
         let mut state = self.inner.state.lock().unwrap();
         match mem::replace(&mut *state, new_state) {
