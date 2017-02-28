@@ -48,8 +48,7 @@ impl<F> fmt::Debug for Shared<F>
 struct Inner<F: Future> {
     next_clone_id: Mutex<u64>,
     state: Mutex<State<F>>,
-    /// Set to a non-None value to trigger debug during poll of this JoinAll.
-    pub debug: Mutex<Option<String>>,
+    debug: Mutex<Option<String>>,
 }
 
 impl<F> fmt::Debug for Inner<F>
@@ -86,6 +85,12 @@ impl<F> Shared<F>
                     debug: Mutex::new(None),
                  }),
         }
+    }
+
+    /// Set an id for this Shared to enable debug logging.
+    pub fn set_debug(&self, id: String) {
+        let mut debug = self.inner.debug.lock().unwrap();
+        *debug = Some(id);
     }
 
     fn if_debug(&self, msg: &str) {
