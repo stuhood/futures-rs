@@ -24,6 +24,19 @@ pub struct JoinAll<I>
           I::Item: IntoFuture,
 {
     elems: Vec<ElemState<<I::Item as IntoFuture>::Future>>,
+    /// Set to a non-None value to trigger debug during poll of this JoinAll.
+    pub debug: Option<String>,
+}
+
+impl<I> JoinAll<I>
+    where I: IntoIterator,
+          I::Item: IntoFuture,
+{
+    fn if_debug(&self, msg: &str) {
+        if let Some(id) = self.debug.as_ref() {
+            println!("<join_all> {}: {}", id, msg);
+        }
+    }
 }
 
 impl<I> fmt::Debug for JoinAll<I>
@@ -79,7 +92,10 @@ pub fn join_all<I>(i: I) -> JoinAll<I>
     let elems = i.into_iter().map(|f| {
         ElemState::Pending(f.into_future())
     }).collect();
-    JoinAll { elems: elems }
+    JoinAll {
+        elems: elems,
+        debug: None,
+    }
 }
 
 impl<I> Future for JoinAll<I>
@@ -91,11 +107,11 @@ impl<I> Future for JoinAll<I>
 
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        println!("<join_all> polling {}", self.elems.len());
+        self.if_debug(&format!("polling {}", self.elems.len()));
         let mut all_done = true;
 
         for idx in 0 .. self.elems.len() {
-            println!("<join_all>   inspecting {:?}", idx);
+            self.if_debug(&format!("  inspecting {:?}", idx));
             let done_val = match &mut self.elems[idx] {
                 &mut ElemState::Pending(ref mut t) => {
                     match t.poll() {
@@ -110,7 +126,7 @@ impl<I> Future for JoinAll<I>
                 &mut ElemState::Done(ref mut _v) => continue,
             };
 
-            println!("<join_all>   elem {:?} was {:?}", idx, match &done_val { &Ok(_) => "ok", &Err(_) => "err"});
+            self.if_debug(&format!("  elem {:?} was {:?}", idx, match &done_val { &Ok(_) => "ok", &Err(_) => "err"}));
 
             match done_val {
                 Ok(v) => self.elems[idx] = ElemState::Done(v),
@@ -122,6 +138,8 @@ impl<I> Future for JoinAll<I>
                 }
             }
         }
+
+        self.if_debug(&format!("is all_done? {:?}", all_done));
 
         if all_done {
             let elems = mem::replace(&mut self.elems, Vec::new());
