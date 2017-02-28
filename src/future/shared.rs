@@ -161,6 +161,7 @@ impl<F> Future for Shared<F>
         };
         drop(state);
 
+        self.if_debug("polling!");
         let event = task::UnparkEvent::new(unparker.clone(), 0);
         let new_state = match task::with_unpark_event(event, || original_future.poll()) {
             Ok(Async::NotReady) => State::Waiting(unparker, original_future),
