@@ -130,7 +130,7 @@ impl<F> Future for Shared<F>
                     unparker_inner.original_future_needs_poll = false;
                     unparker.clone()
                 } else {
-                    self.if_debug(&format!("parking this clone {:?}", self.id));
+                    self.if_debug("parking this clone");
                     unparker_inner.insert(self.id, task::park());
                     return Ok(Async::NotReady)
                 }
@@ -161,6 +161,7 @@ impl<F> Future for Shared<F>
         };
         drop(state);
 
+        self.if_debug("polling!");
         let event = task::UnparkEvent::new(unparker.clone(), 0);
         let new_state = match task::with_unpark_event(event, || original_future.poll()) {
             Ok(Async::NotReady) => State::Waiting(unparker, original_future),
@@ -174,6 +175,8 @@ impl<F> Future for Shared<F>
             State::Done(Ok(ref v)) => (true, Ok(SharedItem { item: v.clone() }.into())),
             State::Done(Err(ref e)) => (true, Err(SharedError { error: e.clone() }.into())),
         };
+
+        self.if_debug(&format!("finished polling... call unpark? {:?}", call_unpark));
 
         let mut state = self.inner.state.lock().unwrap();
         match mem::replace(&mut *state, new_state) {
