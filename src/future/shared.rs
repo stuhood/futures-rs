@@ -19,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::ops::Deref;
 use std::collections::HashMap;
 use std::vec::Vec;
+use std::string::String;
 
 use {Future, Poll, Async};
 use task;
@@ -29,6 +30,8 @@ use task;
 pub struct Shared<F: Future> {
     id: u64,
     inner: Arc<Inner<F>>,
+    /// Set to a non-None value to trigger debug during poll of this JoinAll.
+    pub debug: Option<String>,
 }
 
 impl<F> fmt::Debug for Shared<F>
@@ -81,6 +84,13 @@ impl<F> Shared<F>
                     next_clone_id: Mutex::new(1),
                     state: Mutex::new(State::Waiting(Arc::new(Unparker::new()), future)),
                  }),
+            debug: None,
+        }
+    }
+
+    fn if_debug(&self, msg: &str) {
+        if let Some(id) = self.debug.as_ref() {
+            println!("<shared> <{}> {}: {}", self.id, id, msg);
         }
     }
 
@@ -110,9 +120,11 @@ impl<F> Future for Shared<F>
             State::Waiting(ref unparker, ref _original_future) => {
                 let mut unparker_inner = unparker.inner.lock().unwrap();
                 if unparker_inner.original_future_needs_poll {
+                    self.if_debug("waiting: needs poll!");
                     unparker_inner.original_future_needs_poll = false;
                     unparker.clone()
                 } else {
+                    self.if_debug(&format!("parking this clone {:?}", self.id));
                     unparker_inner.insert(self.id, task::park());
                     return Ok(Async::NotReady)
                 }
@@ -124,8 +136,10 @@ impl<F> Future for Shared<F>
                     // We need to poll the original future, but it's not here right now.
                     // So we store the current task to be unconditionally unparked once
                     // `state` is no longer `Polling`.
+                    self.if_debug("polling:... waiting unconditionally");
                     waiters.push(task::park());
                 } else {
+                    self.if_debug("polling:... waiting conditionally");
                     unparker_inner.insert(self.id, task::park());
                 }
                 return Ok(Async::NotReady)
@@ -180,6 +194,7 @@ impl<F> Clone for Shared<F>
         Shared {
             id: clone_id,
             inner: self.inner.clone(),
+            debug: self.debug.clone(),
         }
     }
 }
