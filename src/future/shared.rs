@@ -181,7 +181,9 @@ impl<F> Future for Shared<F>
         match mem::replace(&mut *state, new_state) {
             State::Polling(_owner, unparker, waiters) => {
                 self.if_debug(&format!("finished polling... call unpark? {:?}; waking waiters {:?}", call_unpark, waiters));
-                if call_unpark { unparker.unpark() }
+                if call_unpark {
+                    unparker.unpark_internal(self.inner.debug.clone())
+                }
                 for waiter in waiters {
                     waiter.unpark();
                 }
@@ -301,6 +303,10 @@ impl Unparker {
     }
 
     fn unpark(&self) {
+        self.unpark_internal(None)
+    }
+
+    fn unpark_internal(&self, debug: Option<String>) {
         let UnparkerInner { tasks, .. } = mem::replace(
             &mut *self.inner.lock().unwrap(),
             UnparkerInner {
@@ -308,6 +314,9 @@ impl Unparker {
                 tasks: HashMap::new(),
             });
 
+        if let Some(id) = debug {
+            println!("<shared> <?> {}: unparking {:?}", id, tasks);
+        }
         for (_, task) in tasks {
             task.unpark();
         }
