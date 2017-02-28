@@ -67,7 +67,7 @@ impl<F> fmt::Debug for Inner<F>
 #[derive(Debug)]
 enum State<F: Future> {
     Waiting(Arc<Unparker>, F),
-    Polling(Arc<Unparker>, Vec<task::Task>),
+    Polling(u64, Arc<Unparker>, Vec<task::Task>),
     Done(Result<Arc<F::Item>, Arc<F::Error>>),
 }
 
@@ -137,7 +137,7 @@ impl<F> Future for Shared<F>
                     return Ok(Async::NotReady)
                 }
             }
-            State::Polling(ref unparker, ref mut waiters) => {
+            State::Polling(ref owner, ref unparker, ref mut waiters) => {
                 // A clone of this `Shared` is currently calling `original_future.poll()`.
                 let mut unparker_inner = unparker.inner.lock().unwrap();
                 if unparker_inner.original_future_needs_poll {
@@ -145,10 +145,10 @@ impl<F> Future for Shared<F>
                     // So we store the current task to be unconditionally unparked once
                     // `state` is no longer `Polling`.
                     waiters.push(task::park());
-                    self.if_debug(&format!("polling:... waiting unconditionally with {:?}", waiters));
+                    self.if_debug(&format!("polling: {:?} owns the task... waiting unconditionally with {:?}", owner, waiters));
                 } else {
                     unparker_inner.insert(self.id, task::park());
-                    self.if_debug(&format!("polling:... waiting conditionally with {:?}", unparker_inner.tasks));
+                    self.if_debug(&format!("polling: {:?} owns the task... waiting conditionally with {:?}", owner, unparker_inner.tasks));
                 }
                 return Ok(Async::NotReady)
             }
@@ -156,7 +156,7 @@ impl<F> Future for Shared<F>
             State::Done(Err(ref e)) => return Err(SharedError { error: e.clone() }.into()),
         };
 
-        let new_state = State::Polling(unparker, Vec::new());
+        let new_state = State::Polling(self.id, unparker, Vec::new());
         let (unparker, mut original_future) = match mem::replace(&mut *state, new_state) {
             State::Waiting(unparker, original_future) => (unparker, original_future),
             _ => unreachable!(),
@@ -181,7 +181,7 @@ impl<F> Future for Shared<F>
 
         let mut state = self.inner.state.lock().unwrap();
         match mem::replace(&mut *state, new_state) {
-            State::Polling(unparker, waiters) => {
+            State::Polling(_owner, unparker, waiters) => {
                 self.if_debug(&format!("finished polling... call unpark? {:?}; waking waiters {:?}", call_unpark, waiters));
                 if call_unpark { unparker.unpark() }
                 for waiter in waiters {
@@ -216,7 +216,7 @@ impl<F: Future> Drop for Shared<F> {
                 State::Waiting(ref unparker, _) => {
                     unparker.remove(self.id);
                 }
-                State::Polling(ref unparker, _) => {
+                State::Polling(_, ref unparker, _) => {
                     unparker.remove(self.id);
                 }
                 State::Done(_) => (),
