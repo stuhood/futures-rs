@@ -93,7 +93,20 @@ impl<F> Shared<F>
           Arc::get_mut(&mut self.inner).unwrap_or_else(|| 
             panic!("{:?} is already shared.", id)
           );
-        inner.debug = Some(id);
+        inner.debug = Some(id.clone());
+
+        let mut state = inner.state.lock().unwrap();
+        match *state {
+            State::Waiting(ref mut unparker, _) => {
+                let mut unparker_inner = unparker.inner.lock().unwrap();
+                unparker_inner.debug = Some(id)
+            },
+            State::Polling(_, ref mut unparker, _) => {
+                let mut unparker_inner = unparker.inner.lock().unwrap();
+                unparker_inner.debug = Some(id)
+            },
+            State::Done(_) => (),
+        }
     }
 
     fn if_debug(&self, msg: &str) {
@@ -181,9 +194,7 @@ impl<F> Future for Shared<F>
         match mem::replace(&mut *state, new_state) {
             State::Polling(_owner, unparker, waiters) => {
                 self.if_debug(&format!("finished polling... call unpark? {:?}; waking waiters {:?}", call_unpark, waiters));
-                if call_unpark {
-                    unparker.unpark_internal(self.inner.debug.clone())
-                }
+                if call_unpark { unparker.unpark() }
                 for waiter in waiters {
                     waiter.unpark();
                 }
@@ -271,11 +282,19 @@ struct UnparkerInner {
 
     /// Tasks that need to be unparked once the original future resolves.
     tasks: HashMap<u64, task::Task>,
+
+    debug: Option<String>,
 }
 
 impl UnparkerInner {
     fn insert(&mut self, idx: u64, task: task::Task) {
         self.tasks.insert(idx, task);
+    }
+
+    fn if_debug(&self, msg: &str) {
+        if let Some(id) = self.debug.as_ref() {
+            println!("<shared> <?> {}: {}", id, msg);
+        }
     }
 }
 
@@ -292,6 +311,7 @@ impl Unparker {
             inner: Mutex::new(UnparkerInner{
                 original_future_needs_poll: true,
                 tasks: HashMap::new(),
+                debug: None,
             }),
         }
     }
@@ -303,20 +323,20 @@ impl Unparker {
     }
 
     fn unpark(&self) {
-        self.unpark_internal(None)
-    }
+        let UnparkerInner { tasks, .. } = {
+            let mut inner = self.inner.lock().unwrap();
+            inner.if_debug(&format!("unparking {:?}", inner.tasks));
+            let debug = inner.debug.clone();
+            mem::replace(
+                &mut *inner,
+                UnparkerInner {
+                    original_future_needs_poll: true,
+                    tasks: HashMap::new(),
+                    debug: debug,
+                }
+            )
+        };
 
-    fn unpark_internal(&self, debug: Option<String>) {
-        let UnparkerInner { tasks, .. } = mem::replace(
-            &mut *self.inner.lock().unwrap(),
-            UnparkerInner {
-                original_future_needs_poll: true,
-                tasks: HashMap::new(),
-            });
-
-        if let Some(id) = debug {
-            println!("<shared> <?> {}: unparking {:?}", id, tasks);
-        }
         for (_, task) in tasks {
             task.unpark();
         }
