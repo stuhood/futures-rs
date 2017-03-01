@@ -320,9 +320,16 @@ impl<F: Future> Spawn<F> {
     pub fn wait_future(&mut self) -> Result<F::Item, F::Error> {
         let unpark = Arc::new(ThreadUnpark::new(thread::current()));
         loop {
+            println!(">>> root polling...");
             match try!(self.poll_future(unpark.clone())) {
-                Async::NotReady => unpark.park(),
-                Async::Ready(e) => return Ok(e),
+                Async::NotReady => {
+                    println!(">>> root parking.");
+                    unpark.park();
+                },
+                Async::Ready(e) => {
+                    println!(">>> root ready!");
+                    return Ok(e)
+                },
             }
         }
     }
