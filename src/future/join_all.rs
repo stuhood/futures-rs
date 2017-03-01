@@ -133,6 +133,7 @@ impl<I> Future for JoinAll<I>
                 Err(e) => {
                     // On completion drop all our associated resources
                     // ASAP.
+                    self.if_debug(&format!("completing with \"err\": dropping {:?}", self.elems.len()));
                     self.elems = Vec::new();
                     return Err(e)
                 }

@@ -301,6 +301,10 @@ impl UnparkerInner {
 impl task::EventSet for Unparker {
     fn insert(&self, _id: usize) {
         // The original future is ready to get polled again.
+        {
+            let inner = self.inner.lock().unwrap();
+            inner.if_debug("insert to EventSet");
+        }
         self.unpark();
     }
 }
