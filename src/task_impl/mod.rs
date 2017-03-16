@@ -251,7 +251,7 @@ impl Events {
             Events::Zero => {}
             Events::One(ref event) => event.set.insert(event.item),
             Events::Lots(ref list) => {
-                for event in list {
+                for event in list.iter().rev() {
                     event.set.insert(event.item);
                 }
             }
