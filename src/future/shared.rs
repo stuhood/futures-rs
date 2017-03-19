@@ -157,11 +157,11 @@ impl<F> Future for Shared<F>
                     // We need to poll the original future, but it's not here right now.
                     // So we store the current task to be unconditionally unparked once
                     // `state` is no longer `Polling`.
-                    waiters.push(task::park());
                     self.if_debug(&format!("polling: {:?} owns the task... waiting unconditionally with {:?}", owner, waiters));
+                    waiters.push(task::park());
                 } else {
-                    unparker_inner.insert(self.id, task::park());
                     self.if_debug(&format!("polling: {:?} owns the task... waiting conditionally with {:?}", owner, unparker_inner.tasks));
+                    unparker_inner.insert(self.id, task::park());
                 }
                 return Ok(Async::NotReady)
             }
