@@ -158,6 +158,7 @@
 #![deny(missing_docs, missing_debug_implementations)]
 #![doc(html_root_url = "https://docs.rs/futures/0.1")]
 
+extern crate parking_lot;
 #[macro_use]
 #[cfg(feature = "use_std")]
 extern crate std;

@@ -17,9 +17,11 @@ use {Future, Poll, Async};
 use task::{self, Task};
 use executor::{self, Notify, Spawn};
 
+use parking_lot::Mutex;
+
 use std::{fmt, mem, ops};
 use std::cell::UnsafeCell;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::SeqCst;
 use std::collections::HashMap;
@@ -101,7 +103,7 @@ impl<F> Shared<F> where F: Future {
     }
 
     fn set_waiter(&mut self) {
-        let mut waiters = self.inner.notifier.waiters.lock().unwrap();
+        let mut waiters = self.inner.notifier.waiters.lock();
         waiters.insert(self.waiter, task::current());
     }
 
@@ -218,7 +220,7 @@ impl<F> Clone for Shared<F> where F: Future {
 
 impl<F> Drop for Shared<F> where F: Future {
     fn drop(&mut self) {
-        let mut waiters = self.inner.notifier.waiters.lock().unwrap();
+        let mut waiters = self.inner.notifier.waiters.lock();
         waiters.remove(&self.waiter);
     }
 }
@@ -227,7 +229,7 @@ impl Notify for Notifier {
     fn notify(&self, _id: usize) {
         self.state.compare_and_swap(POLLING, REPOLL, SeqCst);
 
-        let waiters = mem::replace(&mut *self.waiters.lock().unwrap(), HashMap::new());
+        let waiters = mem::replace(&mut *self.waiters.lock(), HashMap::new());
 
         for (_, waiter) in waiters {
             waiter.notify();
