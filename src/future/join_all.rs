@@ -20,17 +20,15 @@ enum ElemState<T> where T: Future {
 /// This future is created with the `join_all` method.
 #[must_use = "futures do nothing unless polled"]
 pub struct JoinAll<I>
-    where I: IntoIterator,
-          I::Item: IntoFuture,
+    where I: IntoFuture,
 {
-    elems: Vec<ElemState<<I::Item as IntoFuture>::Future>>,
+    elems: Vec<ElemState<<I as IntoFuture>::Future>>,
 }
 
 impl<I> fmt::Debug for JoinAll<I>
-    where I: IntoIterator,
-          I::Item: IntoFuture,
-          <<I as IntoIterator>::Item as IntoFuture>::Future: fmt::Debug,
-          <<I as IntoIterator>::Item as IntoFuture>::Item: fmt::Debug,
+    where I: IntoFuture,
+          <I as IntoFuture>::Future: fmt::Debug,
+          <I as IntoFuture>::Item: fmt::Debug,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         fmt.debug_struct("JoinAll")
@@ -73,7 +71,7 @@ impl<I> fmt::Debug for JoinAll<I>
 ///     x
 /// });
 /// ```
-pub fn join_all<I>(i: I) -> JoinAll<I>
+pub fn join_all<I>(i: I) -> JoinAll<I::Item>
     where I: IntoIterator,
           I::Item: IntoFuture,
 {
@@ -84,11 +82,10 @@ pub fn join_all<I>(i: I) -> JoinAll<I>
 }
 
 impl<I> Future for JoinAll<I>
-    where I: IntoIterator,
-          I::Item: IntoFuture,
+    where I: IntoFuture,
 {
-    type Item = Vec<<I::Item as IntoFuture>::Item>;
-    type Error = <I::Item as IntoFuture>::Error;
+    type Item = Vec<<I::Future as Future>::Item>;
+    type Error = <I as IntoFuture>::Error;
 
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
