@@ -248,6 +248,8 @@ fn collect_collects() {
     assert_done(|| join_all(vec![f_ok(1)]), Ok(vec![1]));
     assert_done(|| join_all(Vec::<Result<i32, u32>>::new()), Ok(vec![]));
 
+    assert_done(|| vec![f_ok(1), f_ok(2)].into_iter().collect::<JoinAll<_>>(), Ok(vec![1, 2]));
+
     // TODO: needs more tests
 }
 

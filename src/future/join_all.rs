@@ -5,6 +5,7 @@ use std::prelude::v1::*;
 
 use std::fmt;
 use std::mem;
+use std::iter::FromIterator;
 
 use {Future, IntoFuture, Poll, Async};
 
@@ -23,6 +24,17 @@ pub struct JoinAll<I>
     where I: IntoFuture,
 {
     elems: Vec<ElemState<<I as IntoFuture>::Future>>,
+}
+
+impl<I> FromIterator<I> for JoinAll<I>
+    where I: IntoFuture,
+{
+    fn from_iter<T: IntoIterator<Item=I>>(iter: T) -> Self {
+        let elems = iter.into_iter().map(|f| {
+            ElemState::Pending(f.into_future())
+        }).collect();
+        JoinAll { elems: elems }
+    }
 }
 
 impl<I> fmt::Debug for JoinAll<I>
@@ -75,10 +87,7 @@ pub fn join_all<I>(i: I) -> JoinAll<I::Item>
     where I: IntoIterator,
           I::Item: IntoFuture,
 {
-    let elems = i.into_iter().map(|f| {
-        ElemState::Pending(f.into_future())
-    }).collect();
-    JoinAll { elems: elems }
+    i.into_iter().collect()
 }
 
 impl<I> Future for JoinAll<I>
