@@ -54,6 +54,7 @@ mod poll_fn;
 mod select;
 mod skip;
 mod skip_while;
+mod split_off;
 mod take;
 mod take_while;
 mod then;
