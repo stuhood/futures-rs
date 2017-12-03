@@ -13,21 +13,26 @@ pub fn new<S, F>(s: S, f: F) -> (SplitOffPrefix<S, F>, SplitOffSuffix<S>)
     let (tx, rx) = oneshot::channel();
 
     let prefix = SplitOffPrefix {
-        stream: Some(s),
+        inner: Some(PrefixInner {
+            stream: s,
+            suffix: tx,
+        }),
         f: f,
-        suffix: tx,
     };
     let suffix = SplitOffSuffix {
-        inner: Inner::Waiting(rx)
+        inner: SuffixInner::Waiting(rx)
     };
     (prefix, suffix)
 }
 
-#[derive(Debug)]
 #[must_use = "streams do nothing unless polled"]
 pub struct SplitOffPrefix<S, F> where S: Stream {
-    stream: Option<S>,
+    inner: Option<PrefixInner<S>>,
     f: F,
+}
+
+struct PrefixInner<S> where S: Stream {
+    stream: S,
     suffix: oneshot::Sender<(S, Option<S::Item>)>,
 }
 
@@ -36,9 +41,9 @@ impl<S, F> SplitOffPrefix<S, F> where S: Stream {
     /// Finalizes the Prefix by consuming its stream to send to the Suffix.
     ///
     fn handoff(&mut self, item: Option<S::Item>) -> Poll<Option<S::Item>, S::Error> {
-        let stream = self.stream.take().unwrap();
+        let inner = self.inner.take().unwrap();
         // If the tail has been dropped, drop the stream and item.
-        let _ = self.suffix.send((stream, item));
+        let _ = inner.suffix.send((inner.stream, item));
         return Ok(Async::Ready(None))
     }
 }
@@ -51,9 +56,8 @@ impl<S, F> Stream for SplitOffPrefix<S, F>
     type Error = S::Error;
 
     fn poll(&mut self) -> Poll<Option<S::Item>, S::Error> {
-        let mut stream = self.stream.as_mut().expect("poll called after eof");
         loop {
-            match try_ready!(stream.poll()) {
+            match try_ready!(self.inner.as_mut().expect("poll called after eof").stream.poll()) {
                 Some(e) => {
                     if (self.f)(&e) {
                         return Ok(Async::Ready(Some(e)))
@@ -69,11 +73,12 @@ impl<S, F> Stream for SplitOffPrefix<S, F>
     }
 }
 
+#[must_use = "streams do nothing unless polled"]
 pub struct SplitOffSuffix<S> where S: Stream {
-    inner: Inner<S>,
+    inner: SuffixInner<S>,
 }
 
-enum Inner<S> where S: Stream {
+enum SuffixInner<S> where S: Stream {
     Waiting(oneshot::Receiver<(S, Option<S::Item>)>),
     Became(S),
 }
@@ -87,11 +92,23 @@ impl<S> Stream for SplitOffSuffix<S>
     fn poll(&mut self) -> Poll<Option<S::Item>, S::Error> {
 
         let (stream, item) =
-            match &self.inner {
-                &Inner::Became(ref stream) => return stream.poll(),
-                &Inner::Waiting(ref prefix) => try_ready!(prefix.poll()),
+            match &mut self.inner {
+                &mut SuffixInner::Became(ref mut stream) => return stream.poll(),
+                &mut SuffixInner::Waiting(ref mut prefix) => {
+                    // NB: Can't use try_ready, because the err type for oneshot cancellation
+                    // doesn't align.
+                    match prefix.poll() {
+                        Ok(Async::Ready(t)) => t,
+                        Ok(Async::NotReady) => return Ok(Async::NotReady),
+                        Err(_) => {
+                            // Will need a Drop impl for Prefix that sends the Stream so that we
+                            // can assert that this doesn't happen.
+                            unimplemented!("Dropping the prefix is not yet supported.")
+                        },
+                    }
+                },
             };
-        self.inner = Inner::Became(stream);
+        self.inner = SuffixInner::Became(stream);
         Ok(Async::Ready(item))
     }
 }
