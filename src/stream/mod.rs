@@ -87,6 +87,7 @@ pub use self::poll_fn::{poll_fn, PollFn};
 pub use self::select::Select;
 pub use self::skip::Skip;
 pub use self::skip_while::SkipWhile;
+pub use self::split_off::{SplitOffPrefix, SplitOffSuffix};
 pub use self::take::Take;
 pub use self::take_while::TakeWhile;
 pub use self::then::Then;
@@ -1083,6 +1084,19 @@ pub trait Stream {
         where Self: super::sink::Sink + Sized
     {
         split::split(self)
+    }
+
+    /// Splits this Stream into a prefix that satisfies a predicate, and a
+    /// suffix which starts with the first element that does not satisfy the predicate.
+    ///
+    /// The behavior of this combinator is similar to that of `take_while`, except that
+    /// the "tail" of the Stream that `take_while` would discard is instead provided by
+    /// the suffix stream.
+    fn split_off<F>(self, f: F) -> (SplitOffPrefix<Self, F>, SplitOffSuffix<Self>)
+        where F: FnMut(&Self::Item) -> bool,
+              Self: Sized
+    {
+        split_off::new(self, f)
     }
 
     /// Do something with each item of this stream, afterwards passing it on.

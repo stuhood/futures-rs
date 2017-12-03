@@ -1,3 +1,5 @@
+use core::fmt::{Debug, Formatter, Result as FmtResult};
+
 use {Async, Poll, Future};
 use stream::Stream;
 use sync::oneshot;
@@ -8,7 +10,7 @@ use sync::oneshot;
 /// This structure is produced by the `Stream::split_off` method.
 pub fn new<S, F>(s: S, f: F) -> (SplitOffPrefix<S, F>, SplitOffSuffix<S>)
     where S: Stream,
-          F: FnMut(S::Item) -> bool,
+          F: FnMut(&S::Item) -> bool,
 {
     let (tx, rx) = oneshot::channel();
 
@@ -25,10 +27,18 @@ pub fn new<S, F>(s: S, f: F) -> (SplitOffPrefix<S, F>, SplitOffSuffix<S>)
     (prefix, suffix)
 }
 
+/// This structure is produced by the `Stream::split_off` method.
 #[must_use = "streams do nothing unless polled"]
 pub struct SplitOffPrefix<S, F> where S: Stream {
     inner: Option<PrefixInner<S>>,
     f: F,
+}
+
+impl<S, F> Debug for SplitOffPrefix<S, F> where S: Stream + Debug, S::Item: Debug {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        // TODO
+        fmt.debug_struct("SplitOffPrefix").finish()
+    }
 }
 
 struct PrefixInner<S> where S: Stream {
@@ -73,9 +83,17 @@ impl<S, F> Stream for SplitOffPrefix<S, F>
     }
 }
 
+/// This structure is produced by the `Stream::split_off` method.
 #[must_use = "streams do nothing unless polled"]
 pub struct SplitOffSuffix<S> where S: Stream {
     inner: SuffixInner<S>,
+}
+
+impl<S> Debug for SplitOffSuffix<S> where S: Stream + Debug, S::Item: Debug {
+    fn fmt(&self, fmt: &mut Formatter) -> FmtResult {
+        // TODO
+        fmt.debug_struct("SplitOffSuffix").finish()
+    }
 }
 
 enum SuffixInner<S> where S: Stream {

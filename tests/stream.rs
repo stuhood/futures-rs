@@ -151,6 +151,14 @@ fn skip_while() {
     assert_done(|| list().skip_while(|e| Ok(*e % 2 == 1)).collect(),
                 Ok(vec![2, 3]));
 }
+
+#[test]
+fn split_off() {
+    let (prefix, suffix) = list().split_off(|e| *e < 2);
+    assert_done(|| prefix.collect(), Ok(vec![1]));
+    assert_done(|| suffix.collect(), Ok(vec![2, 3]));
+}
+
 #[test]
 fn take() {
     assert_done(|| list().take(2).collect(), Ok(vec![1, 2]));
